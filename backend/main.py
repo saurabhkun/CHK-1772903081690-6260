@@ -2,82 +2,67 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pickle
-import pandas as pd
-import random
+import os
+import numpy as np
 
-app = FastAPI(title="FlashGuard Sentinel API")
+print("📂 Backend: Loading Model...")
 
-# 1. ALLOW REACT TO CONNECT (CORS)
+app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. LOAD THE AI (Silently waits for your friend's file)
-try:
-    with open("flashguard_model.pkl", "rb") as f:
-        ai_model = pickle.load(f)
-    print("✅ REAL AI IS ONLINE!")
-except FileNotFoundError:
-    print("⚠️ WARNING: Waiting for flashguard_model.pkl. Using Fake AI for React testing.")
-    ai_model = None
+# Robust path finding
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "flashguard_model.pkl")
 
-# What the frontend sends us
+try:
+    with open(MODEL_PATH, "rb") as f:
+        ai_model = pickle.load(f)
+    print("✅ Backend: Model Loaded Successfully!")
+except Exception as e:
+    print(f"❌ Backend: FAILED TO LOAD MODEL: {e}")
+
 class TransactionData(BaseModel):
     amount: float
     oldbalanceOrg: float
     newbalanceOrig: float
-    device_id: str
+    oldbalanceDest: float
+    newbalanceDest: float
+    location: str = "India"
 
 @app.post("/predict")
-def process_transaction(data: TransactionData):
+def predict(data: TransactionData):
+    # --- REALISM SCALE ---
+    # We divide the real-world amounts by 10,000 so that 
+    # ₹50,000 becomes 5.0 (which your model likes).
+    scale_factor = 10000 
     
-    # -----------------------------------------
-    # SCENARIO A: FAKE AI (For React Testing NOW)
-    # -----------------------------------------
-    if ai_model is None:
-        fake_risk = random.randint(10, 95)
-        action = "APPROVE" if fake_risk <= 30 else ("REVIEW" if fake_risk <= 70 else "BLOCK")
-        return {
-            "risk_score": fake_risk,
-            "action": action,
-            "reason": "TEST MODE: Waiting for real AI model."
-        }
+    scaled_features = np.array([[
+        data.amount / scale_factor, 
+        data.oldbalanceOrg / scale_factor, 
+        data.newbalanceOrig / scale_factor, 
+        data.oldbalanceDest / scale_factor, 
+        data.newbalanceDest / scale_factor
+    ]])
 
-    # -----------------------------------------
-    # SCENARIO B: REAL AI (When .pkl is loaded)
-    # -----------------------------------------
-    error_balance = data.newbalanceOrig + data.amount - data.oldbalanceOrg
+    # 🤖 PURE ML PREDICTION
+    prediction = ai_model.predict(scaled_features)[0]
     
-    # Hackathon Cheat Code: The AI expects a lot of columns. 
-    # We will give it what we have, and it will fill the rest with 0s automatically so it doesn't crash!
-    input_df = pd.DataFrame([{
-        'amount': data.amount,
-        'oldbalanceOrg': data.oldbalanceOrg,
-        'newbalanceOrig': data.newbalanceOrig,
-        'errorBalanceOrig': error_balance
-    }])
-
-    # Get the expected columns from the model and fill missing ones with 0
-    model_features = ai_model.feature_names_in_
-    for col in model_features:
-        if col not in input_df.columns:
-            input_df[col] = 0.0
-            
-    # Reorder columns to exactly match what the AI was trained on
-    input_df = input_df[model_features]
-
-    # Predict!
-    fraud_probability = ai_model.predict_proba(input_df)[0][1] 
-    risk_score = int(fraud_probability * 100)
+    status = "SUCCESS" if prediction == 1 else "BLOCKED"
     
-    action = "APPROVE" if risk_score <= 30 else ("REVIEW" if risk_score <= 70 else "BLOCK")
+    print(f"📥 Real Amount: ₹{data.amount} | Scaled: {data.amount/scale_factor} | Result: {status}")
 
     return {
-        "risk_score": risk_score,
-        "action": action,
-        "reason": f"AI calculated a {risk_score}% probability of fraud."
+        "status": status,
+        "prediction": int(prediction),
+        "amount": data.amount
     }
+
+@app.get("/")
+def health_check():
+    return {"status": "Backend is ALIVE"}

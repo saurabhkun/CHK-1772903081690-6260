@@ -1,3 +1,7 @@
+![FinTech Winner](https://img.shields.io/badge/Rank-1st_in_FinTech_Domain-gold?style=for-the-badge&logo=target)
+![Total Teams](https://img.shields.io/badge/Competition-157_Teams-blue?style=for-the-badge)
+
+
 
 # 🛡️ FlashGuard Pro: Real-Time Fraud Detection System
 ### *Advanced Behavioral Monitoring & ML-Powered Security*
@@ -94,6 +98,7 @@ npm run dev
 * **CSV Path**: The streamer looks for data in `data/processed_paysim.csv`.
 * **API URL**: Configured to `http://127.0.0.1:8000` by default.
 * **CORS**: Enabled for all origins (`*`) for easy local development.
+
 
 
 
